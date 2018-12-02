@@ -27,6 +27,12 @@
 			"revisionTime": "2017-06-09T00:35:04Z"
 		},
 		{
+			"checksumSHA1": "t8jzPFIv4DNACv+cuZoigNmjPLQ=",
+			"path": "github.com/technoweenie/multipartstreamer",
+			"revision": "a90a01d73ae432e2611d178c18367fbaa13e0154",
+			"revisionTime": "2013-10-20T00:18:33Z"
+		},
+		{
 			"checksumSHA1": "cXokCvyFg5J/JpxYNKB5JSqJH7g=",
 			"path": "golang.org/x/image/bmp",
 			"revision": "cd38e8056d9b27bb2f265effa37fb0ea6b8a7f0f",
@@ -55,6 +61,24 @@
 			"path": "golang.org/x/image/tiff/lzw",
 			"revision": "cd38e8056d9b27bb2f265effa37fb0ea6b8a7f0f",
 			"revisionTime": "2018-11-15T22:27:58Z"
+		},
+		{
+			"checksumSHA1": "f3Y7JIZH61oMmp8nphqe8Mg+XoU=",
+			"path": "golang.org/x/net/internal/socks",
+			"revision": "351d144fa1fc0bd934e2408202be0c29f25e35a0",
+			"revisionTime": "2018-11-30T00:35:12Z"
+		},
+		{
+			"checksumSHA1": "UrFs0T7kkYsUxJG5bsJt7KB8ejI=",
+			"path": "golang.org/x/net/proxy",
+			"revision": "351d144fa1fc0bd934e2408202be0c29f25e35a0",
+			"revisionTime": "2018-11-30T00:35:12Z"
+		},
+		{
+			"checksumSHA1": "RpSF7uMF4kpc3vZabAJxACILrnw=",
+			"path": "gopkg.in/telegram-bot-api.v4",
+			"revision": "9860bdfd3a171ceafb6e1eafa163482a6ef92643",
+			"revisionTime": "2018-10-08T19:45:45Z"
 		}
 	],
 	"rootPath": "github.com/Andykaban/pupok-polaroid-bot"

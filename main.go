@@ -1,20 +1,22 @@
 package main
 
 import (
-	"github.com/Andykaban/pupok-polaroid-bot/transform"
+	"flag"
+	"github.com/Andykaban/pupok-polaroid-bot/bot"
+	"github.com/Andykaban/pupok-polaroid-bot/config"
 	"log"
 )
 
+func Usage() {
+	log.Println("!!! Pupok polaroid bot !!!")
+	log.Println("Usage: pupok-polaroid-bot -config 'path to config bot file'")
+	flag.PrintDefaults()
+}
+
 func main() {
 	log.Println("Start bot..")
-	transformer, err := transform.New("./static/images/background.png",
-		"./static/fonts/wqy-zenhei.ttf")
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = transformer.CreatePolaroidImage("/Users/andy/Downloads/cat.jpg",
-		"/Users/andy/Downloads/cat_1.jpg", "!!! KURLIKURLI !!!")
-	if err != nil {
-		log.Fatal(err)
-	}
+	configPath := flag.String("config", "config.json", "path to bot config file")
+	botConfig := config.ParseBotConfig(*configPath)
+	tgBot := bot.NewBot(botConfig)
+	tgBot.BotMainHandler()
 }

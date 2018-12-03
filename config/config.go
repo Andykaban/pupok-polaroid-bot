@@ -10,7 +10,6 @@ import (
 type BotConfig struct {
 	BotToken string `json:"bot_token"`
 	BotProxyUrl string `json:"bot_proxy_url"`
-	BotProxyPort string `json:"bot_proxy_port"`
 	BotProxyLogin string `json:"bot_proxy_login"`
 	BotProxyPassword string `json:"bot_proxy_password"`
 	BotTempDir string `json:"bot_temp_dir"`
@@ -26,6 +25,9 @@ func ParseBotConfig(configPath string) *BotConfig {
 		log.Fatal(err)
 	}
 	byteValue, _ := ioutil.ReadAll(raw)
-	json.Unmarshal(byteValue, &botConfig)
+	err = json.Unmarshal(byteValue, &botConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
 	return &botConfig
 }

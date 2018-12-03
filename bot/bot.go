@@ -10,6 +10,7 @@ import (
 	"image/jpeg"
 	"log"
 	"net/http"
+	"os"
 )
 
 const TELEGRAM_ROOT = "https://api.telegram.org/file/bot"
@@ -62,6 +63,11 @@ func (b *Bot) sendTextMessage(chatId int64, message string) {
 	b.TelegramBot.Send(msg)
 }
 
+func (b *Bot) sendPictureMessage(chatId int64, picturePath string) {
+	msg := tgbotapi.NewPhotoUpload(chatId, picturePath)
+	b.TelegramBot.Send(msg)
+}
+
 func (b *Bot) downloadPhoto(chatId int64, photoId, downloadPath string) {
 	log.Printf("Try to download file with %s ID", photoId)
 	resp, err := b.TelegramBot.GetFile(tgbotapi.FileConfig{FileID:photoId})
@@ -97,12 +103,21 @@ func (b *Bot) BotMainHandler() {
 		}
 		chatId := update.Message.Chat.ID
 		if update.Message.Photo != nil {
-			downloadFileName := utils.GetRandomFileName(b.TempDir)
-			newFileName := utils.GetRandomFileName(b.TempDir)
+			srcFileName := utils.GetRandomFileName(b.TempDir)
+			dstFileName := utils.GetRandomFileName(b.TempDir)
 			photos := *update.Message.Photo
 			photoId := photos[1].FileID
-			b.downloadPhoto(chatId, photoId, downloadFileName)
-			b.Transformer.CreatePolaroidImage(downloadFileName, newFileName, "PAHOM")
+			b.downloadPhoto(chatId, photoId, srcFileName)
+			b.Transformer.CreatePolaroidImage(srcFileName, dstFileName, "PAHOM")
+			b.sendPictureMessage(chatId, dstFileName)
+			err := os.Remove(srcFileName)
+			if err != nil {
+				log.Println(err)
+			}
+			err = os.Remove(dstFileName)
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 }

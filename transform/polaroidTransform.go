@@ -11,14 +11,14 @@ import (
 )
 
 const (
-	BACKGROUND_WIDTH  = 300
-	BACKGROUND_HEIGHT = 320
+	backgroundWidth = 300
+	backgroundHeight = 320
 
-	RESIZED_WITH      = 235
-	RESIZED_HEIGHT    = 245
+	resizedWidth = 235
+	resizedHeight = 245
 
-	BLANK_WIDTH = 330
-	BLANCH_HEIGHT = 350
+	blankWidth = 330
+	blankHeight = 350
 )
 
 type PolaroidTransform struct {
@@ -31,7 +31,7 @@ func New(backgroundPath, fontPath string) (*PolaroidTransform, error) {
 	if err != nil {
 		return nil, err
 	}
-	background := imaging.Fit(backgroundRaw, BACKGROUND_WIDTH, BACKGROUND_HEIGHT, imaging.Gaussian)
+	background := imaging.Fit(backgroundRaw, backgroundWidth, backgroundHeight, imaging.Gaussian)
 
 	fontBytes, err := ioutil.ReadFile(fontPath)
 	if err != nil {
@@ -43,18 +43,25 @@ func New(backgroundPath, fontPath string) (*PolaroidTransform, error) {
 	}
 	ctx := freetype.NewContext()
 	ctx.SetFont(font)
-	ctx.SetDPI(80)
+	ctx.SetDPI(90)
 	ctx.SetFontSize(16)
 	ctx.SetSrc(image.NewUniform(color.RGBA{0, 0, 255, 255}))
 	return &PolaroidTransform{background: background, ctx: ctx}, nil
 }
 
 func (p *PolaroidTransform) addTextLabel(img *image.NRGBA, x, y int, label string) error {
+	var textShift int
 	p.ctx.SetDst(img)
 	p.ctx.SetClip(img.Bounds())
 	textLength := utf8.RuneCountInString(label)
-	textSize := 2 * textLength
-	deltaX := x - textSize
+	if textLength > 0 && textLength <= 10 {
+		textShift = 3
+	} else if textLength > 10 && textLength <=15 {
+		textShift = 5
+	} else {
+		textShift = 9
+	}
+	deltaX := x - (textShift * textLength)
 	if deltaX < 0 {
 		deltaX = 10
 	}
@@ -70,7 +77,7 @@ func (p *PolaroidTransform) CreatePolaroidImage(srcImagePath, dstImagePath, text
 	if err != nil {
 		return err
 	}
-	resizeImage := imaging.Resize(sourceImage, RESIZED_WITH, RESIZED_HEIGHT, imaging.Gaussian)
+	resizeImage := imaging.Resize(sourceImage, resizedWidth, resizedHeight, imaging.Gaussian)
 	contrastImage := imaging.AdjustContrast(resizeImage, 12.0)
 	sharpenImage := imaging.Sharpen(contrastImage, 17.0)
 
@@ -78,7 +85,7 @@ func (p *PolaroidTransform) CreatePolaroidImage(srcImagePath, dstImagePath, text
 
 	p.addTextLabel(combinedImage, 120, 285, textLabel)
 
-	blank := imaging.New(BLANK_WIDTH, BLANCH_HEIGHT, color.White)
+	blank := imaging.New(blankWidth, blankHeight, color.White)
 	blankBound := blank.Bounds()
 	combinedBounds := combinedImage.Bounds()
 	toPos := image.Point{X: blankBound.Max.X/2 - combinedBounds.Max.X/2,

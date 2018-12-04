@@ -13,13 +13,12 @@ import (
 	"os"
 )
 
-const TELEGRAM_ROOT = "https://api.telegram.org/file/bot"
+const telegramRoot = "https://api.telegram.org/file/bot"
 
 type Bot struct {
 	TelegramBot *tgbotapi.BotAPI
 	Transformer *transform.PolaroidTransform
 	TempDir string
-	LabelsMap map[int]string
 }
 
 func NewBot(botConfig *config.BotConfig) *Bot {
@@ -54,8 +53,7 @@ func NewBot(botConfig *config.BotConfig) *Bot {
 	}
 	return &Bot{TelegramBot:bot,
 		Transformer:transformer,
-		TempDir:botConfig.BotTempDir,
-		LabelsMap:make(map[int]string)}
+		TempDir:botConfig.BotTempDir}
 }
 
 func (b *Bot) sendTextMessage(chatId int64, message string) {
@@ -76,7 +74,7 @@ func (b *Bot) downloadPhoto(chatId int64, photoId, downloadPath string) {
 		b.sendTextMessage(chatId, err.Error())
 		return
 	}
-	downloadUrl := TELEGRAM_ROOT + b.TelegramBot.Token + "/" +resp.FilePath
+	downloadUrl := telegramRoot + b.TelegramBot.Token + "/" +resp.FilePath
 	raw, err := http.Get(downloadUrl)
 	defer raw.Body.Close()
 	if err != nil {
@@ -94,10 +92,12 @@ func (b *Bot) downloadPhoto(chatId int64, photoId, downloadPath string) {
 
 func (b *Bot) BotMainHandler() {
 	log.Printf("Authorized on account %s", b.TelegramBot.Self.UserName)
+	msgStorage := NewMessagesStorage()
 	updateConfig := tgbotapi.NewUpdate(0)
 	updateConfig.Timeout = 60
 	updates, _ := b.TelegramBot.GetUpdatesChan(updateConfig)
 	for update := range updates {
+		msgStorage.RemoveExpiredMessages()
 		if update.Message == nil {
 			continue
 		}
@@ -105,19 +105,31 @@ func (b *Bot) BotMainHandler() {
 		if update.Message.Photo != nil {
 			srcFileName := utils.GetRandomFileName(b.TempDir)
 			dstFileName := utils.GetRandomFileName(b.TempDir)
-			photos := *update.Message.Photo
-			photoId := photos[1].FileID
-			b.downloadPhoto(chatId, photoId, srcFileName)
-			b.Transformer.CreatePolaroidImage(srcFileName, dstFileName, "PAHOM")
-			b.sendPictureMessage(chatId, dstFileName)
-			err := os.Remove(srcFileName)
-			if err != nil {
-				log.Println(err)
-			}
-			err = os.Remove(dstFileName)
-			if err != nil {
-				log.Println(err)
-			}
+			msg := msgStorage.GetMessage(chatId)
+			go func() {
+				photos := *update.Message.Photo
+				photoId := photos[1].FileID
+				b.downloadPhoto(chatId, photoId, srcFileName)
+				b.Transformer.CreatePolaroidImage(srcFileName, dstFileName, msg)
+				b.sendPictureMessage(chatId, dstFileName)
+				err := os.Remove(srcFileName)
+				if err != nil {
+					log.Println(err)
+				}
+				err = os.Remove(dstFileName)
+				if err != nil {
+					log.Println(err)
+				}
+			}()
+		}
+
+		switch update.Message.Command() {
+		case "start":
+			b.sendTextMessage(chatId, botHello)
+		case "help":
+			b.sendTextMessage(chatId, botHelp)
+		default:
+			msgStorage.SetMessage(chatId, update.Message.Text)
 		}
 	}
 }

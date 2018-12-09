@@ -110,9 +110,14 @@ func (b *Bot) BotMainHandler() {
 				photos := *update.Message.Photo
 				photoId := photos[1].FileID
 				b.downloadPhoto(chatId, photoId, srcFileName)
-				b.Transformer.CreatePolaroidImage(srcFileName, dstFileName, msg)
+				err := b.Transformer.CreatePolaroidImage(srcFileName, dstFileName, msg)
+				if err != nil {
+					log.Println(err)
+					b.sendTextMessage(chatId, err.Error())
+					return
+				}
 				b.sendPictureMessage(chatId, dstFileName)
-				err := os.Remove(srcFileName)
+				err = os.Remove(srcFileName)
 				if err != nil {
 					log.Println(err)
 				}

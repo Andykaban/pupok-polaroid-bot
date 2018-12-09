@@ -63,7 +63,7 @@ func (p *PolaroidTransform) addTextLabel(img *image.NRGBA, x, y int, label strin
 	}
 	deltaX := x - (textShift * textLength)
 	if deltaX < 0 {
-		deltaX = 10
+		deltaX = 15
 	}
 	pt := freetype.Pt(deltaX, y+int(p.ctx.PointToFixed(12)>>6))
 	if _, err := p.ctx.DrawString(label, pt); err != nil {
@@ -73,29 +73,41 @@ func (p *PolaroidTransform) addTextLabel(img *image.NRGBA, x, y int, label strin
 }
 
 func (p *PolaroidTransform) CreatePolaroidImage(srcImagePath, dstImagePath, textLabel string) error {
+	var fitImage *image.NRGBA
 	sourceImage, err := imaging.Open(srcImagePath)
 	if err != nil {
 		return err
 	}
-	resizeImage := imaging.Resize(sourceImage, resizedWidth, resizedHeight, imaging.Gaussian)
+	sourceBounds := sourceImage.Bounds()
+	if sourceBounds.Max.X > sourceBounds.Max.Y {
+		fitImage = imaging.Fit(sourceImage, blankWidth, blankHeight, imaging.Gaussian)
+	} else {
+		fitImage = imaging.Clone(sourceImage)
+	}
+	resizeImage := imaging.Resize(fitImage, resizedWidth, resizedHeight, imaging.Gaussian)
 	contrastImage := imaging.AdjustContrast(resizeImage, 12.0)
 	sharpenImage := imaging.Sharpen(contrastImage, 17.0)
 
 	combinedImage := imaging.Paste(p.background, sharpenImage, image.Point{X: 14, Y: 20})
 
-	p.addTextLabel(combinedImage, 120, 285, textLabel)
-
+	err = p.addTextLabel(combinedImage, 120, 280, textLabel)
+	if err != nil {
+		return err
+	}
 	blank := imaging.New(blankWidth, blankHeight, color.White)
-	blankBound := blank.Bounds()
+	blankBounds := blank.Bounds()
 	combinedBounds := combinedImage.Bounds()
-	toPos := image.Point{X: blankBound.Max.X/2 - combinedBounds.Max.X/2,
-		Y: blankBound.Max.Y/2 - combinedBounds.Max.Y/2}
+	toPos := image.Point{X: blankBounds.Max.X/2 - combinedBounds.Max.X/2,
+		Y: blankBounds.Max.Y/2 - combinedBounds.Max.Y/2}
 	imageWithBlank := imaging.Paste(blank, combinedImage, toPos)
 
 	angle := float64(utils.GetRandom(-10, 10))
 	rotatedImage := imaging.Rotate(imageWithBlank, angle, color.White)
 
-	imaging.Save(rotatedImage, dstImagePath)
+	err = imaging.Save(rotatedImage, dstImagePath)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

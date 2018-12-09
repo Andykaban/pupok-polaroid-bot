@@ -1,7 +1,6 @@
 package bot
 
 import (
-	"log"
 	"sync"
 	"time"
 )
@@ -47,7 +46,6 @@ func (m *MessagesStorage) RemoveExpiredMessages() {
 	for key,value := range m.messages {
 		startTime := value.expiration
 		if currentTime - startTime > maxExpirationDelta {
-			log.Print(value)
 			delete(m.messages, key)
 		}
 	}

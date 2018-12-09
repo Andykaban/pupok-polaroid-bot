@@ -73,18 +73,22 @@ func (p *PolaroidTransform) addTextLabel(img *image.NRGBA, x, y int, label strin
 }
 
 func (p *PolaroidTransform) CreatePolaroidImage(srcImagePath, dstImagePath, textLabel string) error {
-	var fitImage *image.NRGBA
+	var cropImage *image.NRGBA
 	sourceImage, err := imaging.Open(srcImagePath)
 	if err != nil {
 		return err
 	}
 	sourceBounds := sourceImage.Bounds()
 	if sourceBounds.Max.X > sourceBounds.Max.Y {
-		fitImage = imaging.Fit(sourceImage, blankWidth, blankHeight, imaging.Gaussian)
+		newWidth := 15*sourceBounds.Max.Y/16
+		widthDelta := int((sourceBounds.Max.X - newWidth)/2)
+		cropImage = imaging.Crop(sourceImage, image.Rect(widthDelta, 0,
+			sourceBounds.Max.X-widthDelta, sourceBounds.Max.Y))
+
 	} else {
-		fitImage = imaging.Clone(sourceImage)
+		cropImage = imaging.Clone(sourceImage)
 	}
-	resizeImage := imaging.Resize(fitImage, resizedWidth, resizedHeight, imaging.Gaussian)
+	resizeImage := imaging.Resize(cropImage, resizedWidth, resizedHeight, imaging.Gaussian)
 	contrastImage := imaging.AdjustContrast(resizeImage, 12.0)
 	sharpenImage := imaging.Sharpen(contrastImage, 17.0)
 

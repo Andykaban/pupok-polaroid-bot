@@ -1,13 +1,15 @@
 package transform
 
 import (
+	"errors"
 	"github.com/Andykaban/pupok-polaroid-bot/utils"
 	"github.com/disintegration/imaging"
 	"github.com/golang/freetype"
+	"github.com/golang/freetype/truetype"
+	"golang.org/x/image/font"
 	"image"
 	"image/color"
 	"io/ioutil"
-	"unicode/utf8"
 )
 
 const (
@@ -24,6 +26,7 @@ const (
 type PolaroidTransform struct {
 	background *image.NRGBA
 	ctx        *freetype.Context
+	face       font.Face
 }
 
 func New(backgroundPath, fontPath string) (*PolaroidTransform, error) {
@@ -46,22 +49,33 @@ func New(backgroundPath, fontPath string) (*PolaroidTransform, error) {
 	ctx.SetDPI(90)
 	ctx.SetFontSize(16)
 	ctx.SetSrc(image.NewUniform(color.RGBA{0, 0, 255, 255}))
-	return &PolaroidTransform{background: background, ctx: ctx}, nil
+	opts := truetype.Options{}
+	opts.Size = 16
+	face := truetype.NewFace(font, &opts)
+	return &PolaroidTransform{background: background, ctx: ctx, face: face}, nil
 }
 
 func (p *PolaroidTransform) addTextLabel(img *image.NRGBA, x, y int, label string) error {
-	var textShift int
+	var deltaX int
 	p.ctx.SetDst(img)
 	p.ctx.SetClip(img.Bounds())
-	textLength := utf8.RuneCountInString(label)
-	if textLength > 0 && textLength <= 10 {
-		textShift = 3
-	} else if textLength > 10 && textLength <=15 {
-		textShift = 5
-	} else {
-		textShift = 9
+	totalWidth := 0
+	for _, textLetter := range label {
+		awidth, ok := p.face.GlyphAdvance(rune(textLetter))
+		if ok != true {
+			return errors.New("GlyphAdvance func return error status")
+		}
+		iwidth := int(float64(awidth) / 64)
+		totalWidth += iwidth
 	}
-	deltaX := x - (textShift * textLength)
+	//log.Println(totalWidth)
+	if totalWidth >= 100 {
+		deltaX = int((x - totalWidth/2)/2)
+		totalWidth /= 2
+	} else {
+		deltaX = int(x - totalWidth)
+	}
+	//log.Println(deltaX)
 	if deltaX < 0 {
 		deltaX = 15
 	}
@@ -84,7 +98,6 @@ func (p *PolaroidTransform) CreatePolaroidImage(srcImagePath, dstImagePath, text
 		widthDelta := int((sourceBounds.Max.X - newWidth)/2)
 		cropImage = imaging.Crop(sourceImage, image.Rect(widthDelta, 0,
 			sourceBounds.Max.X-widthDelta, sourceBounds.Max.Y))
-
 	} else {
 		cropImage = imaging.Clone(sourceImage)
 	}
@@ -94,7 +107,7 @@ func (p *PolaroidTransform) CreatePolaroidImage(srcImagePath, dstImagePath, text
 
 	combinedImage := imaging.Paste(p.background, sharpenImage, image.Point{X: 14, Y: 20})
 
-	err = p.addTextLabel(combinedImage, 120, 280, textLabel)
+	err = p.addTextLabel(combinedImage, 150, 280, textLabel)
 	if err != nil {
 		return err
 	}

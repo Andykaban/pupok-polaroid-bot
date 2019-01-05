@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"fmt"
 	"github.com/Andykaban/pupok-polaroid-bot/config"
 	"github.com/Andykaban/pupok-polaroid-bot/transform"
 	"github.com/Andykaban/pupok-polaroid-bot/utils"
@@ -14,11 +15,18 @@ import (
 )
 
 const telegramRoot = "https://api.telegram.org/file/bot"
+const botTaskCap = 30
 
 type Bot struct {
 	TelegramBot *tgbotapi.BotAPI
 	Transformer *transform.PolaroidTransform
 	TempDir string
+}
+
+type TaskBot struct {
+	ChatId int64
+	BotError error
+	SendBotError bool
 }
 
 func NewBot(botConfig *config.BotConfig) *Bot {
@@ -66,36 +74,52 @@ func (b *Bot) sendPictureMessage(chatId int64, picturePath string) {
 	b.TelegramBot.Send(msg)
 }
 
-func (b *Bot) downloadPhoto(chatId int64, photoId, downloadPath string) {
+func (b *Bot) downloadPhoto(chatId int64, photoId, downloadPath string) error {
 	log.Printf("Try to download file with %s ID", photoId)
 	resp, err := b.TelegramBot.GetFile(tgbotapi.FileConfig{FileID:photoId})
 	if err != nil {
-		log.Println(err)
-		b.sendTextMessage(chatId, err.Error())
-		return
+		return err
 	}
 	downloadUrl := telegramRoot + b.TelegramBot.Token + "/" +resp.FilePath
+	log.Printf("Handle %s url", downloadUrl)
 	raw, err := http.Get(downloadUrl)
 	defer raw.Body.Close()
 	if err != nil {
-		log.Println(err)
-		b.sendTextMessage(chatId, err.Error())
-		return
+		return err
 	}
 	img, err := jpeg.Decode(raw.Body)
 	if err != nil {
-		log.Println(err)
-		b.sendTextMessage(chatId, err.Error())
+		return err
 	}
 	imaging.Save(img, downloadPath)
+	return nil
 }
 
 func (b *Bot) BotMainHandler() {
 	log.Printf("Authorized on account %s", b.TelegramBot.Self.UserName)
 	msgStorage := NewMessagesStorage()
+
+	botTaskChan := make(chan TaskBot, botTaskCap)
+
 	updateConfig := tgbotapi.NewUpdate(0)
 	updateConfig.Timeout = 60
 	updates, _ := b.TelegramBot.GetUpdatesChan(updateConfig)
+
+	go func() {
+		for {
+			currentTask := <-botTaskChan
+			if currentTask.BotError != nil {
+				fullMsg := fmt.Sprintf("Task chat ID - %d Error message - %s", currentTask.ChatId,
+					currentTask.BotError.Error())
+				log.Println(fullMsg)
+				if currentTask.SendBotError {
+					log.Println(fmt.Sprintf("Send error message to %d chat ID", currentTask.ChatId))
+					b.sendTextMessage(currentTask.ChatId, currentTask.BotError.Error())
+				}
+			}
+		}
+	}()
+
 	for update := range updates {
 		msgStorage.RemoveExpiredMessages()
 		if update.Message == nil {
@@ -107,24 +131,31 @@ func (b *Bot) BotMainHandler() {
 			dstFileName := utils.GetRandomFileName(b.TempDir)
 			msg := msgStorage.GetMessage(chatId)
 			go func() {
+				task := TaskBot{ChatId:chatId, BotError:nil, SendBotError:false}
 				photos := *update.Message.Photo
 				photoId := photos[1].FileID
-				b.downloadPhoto(chatId, photoId, srcFileName)
-				err := b.Transformer.CreatePolaroidImage(srcFileName, dstFileName, msg)
+				err := b.downloadPhoto(chatId, photoId, srcFileName)
 				if err != nil {
-					log.Println(err)
-					b.sendTextMessage(chatId, err.Error())
-					return
+					task.BotError = err
+					task.SendBotError = true
+				} else {
+					err = b.Transformer.CreatePolaroidImage(srcFileName, dstFileName, msg)
+					if err != nil {
+						task.BotError = err
+						task.SendBotError = true
+					} else {
+						b.sendPictureMessage(chatId, dstFileName)
+						err = os.Remove(srcFileName)
+						if err != nil {
+							task.BotError = err
+						}
+						err = os.Remove(dstFileName)
+						if err != nil {
+							task.BotError = err
+						}
+					}
 				}
-				b.sendPictureMessage(chatId, dstFileName)
-				err = os.Remove(srcFileName)
-				if err != nil {
-					log.Println(err)
-				}
-				err = os.Remove(dstFileName)
-				if err != nil {
-					log.Println(err)
-				}
+				botTaskChan <- task
 			}()
 		}
 

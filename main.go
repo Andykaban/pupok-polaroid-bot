@@ -18,5 +18,6 @@ func main() {
 	configPath := flag.String("config", "config.json", "path to bot config file")
 	botConfig := config.ParseBotConfig(*configPath)
 	tgBot := bot.NewBot(botConfig)
+	tgBot.WatchDog()
 	tgBot.BotMainHandler()
 }

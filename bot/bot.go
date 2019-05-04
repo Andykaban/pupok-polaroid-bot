@@ -12,75 +12,101 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
+	"time"
 )
 
 const telegramRoot = "https://api.telegram.org/file/bot"
 const botTaskCap = 30
 
 type Bot struct {
-	TelegramBot *tgbotapi.BotAPI
-	Transformer *transform.PolaroidTransform
-	TempDir string
+	mutex                    sync.Mutex
+	TelegramBot              *tgbotapi.BotAPI
+	Transformer              *transform.PolaroidTransform
+	TempDir                  string
+	TelegramBotToken         string
+	TelegramBotProxyUrl      string
+	TelegramBotProxyLogin    string
+	TelegramBotProxyPassword string
 }
 
 type TaskBot struct {
-	ChatId int64
-	BotError error
+	ChatId       int64
+	BotError     error
 	SendBotError bool
 }
 
 func NewBot(botConfig *config.BotConfig) *Bot {
-	var bot *tgbotapi.BotAPI
-	var err error
-	if botConfig.BotProxyUrl == "" {
-		bot, err = tgbotapi.NewBotAPI(botConfig.BotToken)
-		if err != nil {
-			panic(err)
-		}
-	} else {
-		var auth proxy.Auth
-		if botConfig.BotProxyLogin != "" || botConfig.BotProxyPassword != "" {
-			auth = proxy.Auth{User:botConfig.BotProxyLogin, Password:botConfig.BotProxyPassword}
-		}
-		dialer, err := proxy.SOCKS5("tcp", botConfig.BotProxyUrl, &auth, proxy.Direct)
-		if err != nil {
-			panic(err)
-		}
-		httpTransport := &http.Transport{}
-		httpTransport.Dial = dialer.Dial
-		httpClient := http.Client{Transport:httpTransport}
-		bot, err = tgbotapi.NewBotAPIWithClient(botConfig.BotToken, &httpClient)
-		if err != nil {
-			panic(err)
-		}
-		http.DefaultTransport = httpTransport
+	bot, err := createNewBot(botConfig.BotToken, botConfig.BotProxyUrl,
+		botConfig.BotProxyLogin, botConfig.BotProxyPassword)
+	if err != nil {
+		panic(err)
 	}
 	transformer, err := transform.New(botConfig.BackgroundPath, botConfig.FontPath)
 	if err != nil {
 		panic(err)
 	}
-	return &Bot{TelegramBot:bot,
-		Transformer:transformer,
-		TempDir:botConfig.BotTempDir}
+	return &Bot{TelegramBot: bot,
+		Transformer:              transformer,
+		TempDir:                  botConfig.BotTempDir,
+		TelegramBotToken:         botConfig.BotToken,
+		TelegramBotProxyUrl:      botConfig.BotProxyUrl,
+		TelegramBotProxyLogin:    botConfig.BotProxyLogin,
+		TelegramBotProxyPassword: botConfig.BotProxyPassword}
+}
+
+func createNewBot(botToken, botProxyUrl, botProxyLogin, botProxyPassword string) (*tgbotapi.BotAPI, error) {
+	var bot *tgbotapi.BotAPI
+	var err error
+	if botProxyUrl == "" {
+		bot, err = tgbotapi.NewBotAPI(botToken)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		var auth proxy.Auth
+		if botProxyLogin != "" || botProxyPassword != "" {
+			auth = proxy.Auth{User: botProxyLogin, Password: botProxyPassword}
+		}
+		dialer, err := proxy.SOCKS5("tcp", botProxyUrl, &auth, proxy.Direct)
+		if err != nil {
+			return nil, err
+		}
+		httpTransport := &http.Transport{}
+		httpTransport.Dial = dialer.Dial
+		httpClient := http.Client{Transport: httpTransport}
+		bot, err = tgbotapi.NewBotAPIWithClient(botToken, &httpClient)
+		if err != nil {
+			return nil, err
+		}
+		http.DefaultTransport = httpTransport
+	}
+	return bot, nil
 }
 
 func (b *Bot) sendTextMessage(chatId int64, message string) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
 	msg := tgbotapi.NewMessage(chatId, message)
 	b.TelegramBot.Send(msg)
 }
 
 func (b *Bot) sendPictureMessage(chatId int64, picturePath string) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
 	msg := tgbotapi.NewPhotoUpload(chatId, picturePath)
 	b.TelegramBot.Send(msg)
 }
 
 func (b *Bot) downloadPhoto(chatId int64, photoId, downloadPath string) error {
 	log.Printf("Try to download file with %s ID", photoId)
-	resp, err := b.TelegramBot.GetFile(tgbotapi.FileConfig{FileID:photoId})
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+	resp, err := b.TelegramBot.GetFile(tgbotapi.FileConfig{FileID: photoId})
 	if err != nil {
 		return err
 	}
-	downloadUrl := telegramRoot + b.TelegramBot.Token + "/" +resp.FilePath
+	downloadUrl := telegramRoot + b.TelegramBot.Token + "/" + resp.FilePath
 	log.Printf("Handle %s url", downloadUrl)
 	raw, err := http.Get(downloadUrl)
 	defer raw.Body.Close()
@@ -95,6 +121,30 @@ func (b *Bot) downloadPhoto(chatId int64, photoId, downloadPath string) error {
 	return nil
 }
 
+func (b *Bot) WatchDog() {
+	log.Println("Start watchdog goroutine...")
+	go func() {
+		for {
+			b.mutex.Lock()
+			me, err := b.TelegramBot.GetMe()
+			if err != nil {
+				log.Println("Bot connection is broken, try to renew...")
+				renewBot, err := createNewBot(b.TelegramBotToken, b.TelegramBotProxyUrl,
+					b.TelegramBotProxyLogin, b.TelegramBotProxyPassword)
+				if err != nil {
+					log.Println(err.Error())
+				} else {
+					b.TelegramBot = renewBot
+				}
+			} else {
+				log.Println(fmt.Sprintf("Get Bot Info. Current bot ID - %d", me.ID))
+			}
+			b.mutex.Unlock()
+			time.Sleep(3 * time.Minute)
+		}
+	}()
+}
+
 func (b *Bot) BotMainHandler() {
 	log.Printf("Authorized on account %s", b.TelegramBot.Self.UserName)
 	msgStorage := NewMessagesStorage()
@@ -103,7 +153,9 @@ func (b *Bot) BotMainHandler() {
 
 	updateConfig := tgbotapi.NewUpdate(0)
 	updateConfig.Timeout = 60
+	b.mutex.Lock()
 	updates, _ := b.TelegramBot.GetUpdatesChan(updateConfig)
+	b.mutex.Unlock()
 
 	go func() {
 		for {
@@ -131,7 +183,7 @@ func (b *Bot) BotMainHandler() {
 			dstFileName := utils.GetRandomFileName(b.TempDir)
 			msg := msgStorage.GetMessage(chatId)
 			go func() {
-				task := TaskBot{ChatId:chatId, BotError:nil, SendBotError:false}
+				task := TaskBot{ChatId: chatId, BotError: nil, SendBotError: false}
 				photos := *update.Message.Photo
 				photoId := photos[1].FileID
 				err := b.downloadPhoto(chatId, photoId, srcFileName)

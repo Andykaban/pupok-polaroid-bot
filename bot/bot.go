@@ -20,7 +20,7 @@ const telegramRoot = "https://api.telegram.org/file/bot"
 const botTaskCap = 30
 
 type Bot struct {
-	mutex                    sync.Mutex
+	mutex                    *sync.Mutex
 	TelegramBot              *tgbotapi.BotAPI
 	Transformer              *transform.PolaroidTransform
 	TempDir                  string
@@ -46,7 +46,8 @@ func NewBot(botConfig *config.BotConfig) *Bot {
 	if err != nil {
 		panic(err)
 	}
-	return &Bot{TelegramBot: bot,
+	return &Bot{mutex: &sync.Mutex{},
+		TelegramBot:              bot,
 		Transformer:              transformer,
 		TempDir:                  botConfig.BotTempDir,
 		TelegramBotToken:         botConfig.BotToken,

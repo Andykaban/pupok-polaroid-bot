@@ -13,13 +13,13 @@ import (
 )
 
 const (
-	backgroundWidth = 300
+	backgroundWidth  = 300
 	backgroundHeight = 320
 
-	resizedWidth = 235
+	resizedWidth  = 235
 	resizedHeight = 245
 
-	blankWidth = 330
+	blankWidth  = 330
 	blankHeight = 350
 )
 
@@ -70,7 +70,7 @@ func (p *PolaroidTransform) addTextLabel(img *image.NRGBA, x, y int, label strin
 	}
 	//log.Println(totalWidth)
 	if totalWidth >= 100 {
-		deltaX = int((x - totalWidth/2)/2)
+		deltaX = int((x - totalWidth/2) / 2)
 		totalWidth /= 2
 	} else {
 		deltaX = int(x - totalWidth)
@@ -93,13 +93,15 @@ func (p *PolaroidTransform) CreatePolaroidImage(srcImagePath, dstImagePath, text
 		return err
 	}
 	sourceBounds := sourceImage.Bounds()
+	newWidth := 15 * sourceBounds.Max.Y / 16
 	if sourceBounds.Max.X > sourceBounds.Max.Y {
-		newWidth := 15*sourceBounds.Max.Y/16
-		widthDelta := int((sourceBounds.Max.X - newWidth)/2)
+		widthDelta := int((sourceBounds.Max.X - newWidth) / 2)
 		cropImage = imaging.Crop(sourceImage, image.Rect(widthDelta, 0,
 			sourceBounds.Max.X-widthDelta, sourceBounds.Max.Y))
 	} else {
-		cropImage = imaging.Clone(sourceImage)
+		newImage := imaging.New(newWidth, sourceBounds.Max.Y, color.Black)
+		widthDelta := int((newWidth - sourceBounds.Max.X) / 2)
+		cropImage = imaging.Paste(newImage, sourceImage, image.Point{X: widthDelta, Y: 0})
 	}
 	resizeImage := imaging.Resize(cropImage, resizedWidth, resizedHeight, imaging.Gaussian)
 	contrastImage := imaging.AdjustContrast(resizeImage, 12.0)

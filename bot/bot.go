@@ -1,6 +1,8 @@
 package bot
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/Andykaban/pupok-polaroid-bot/config"
 	"github.com/Andykaban/pupok-polaroid-bot/transform"
@@ -16,7 +18,7 @@ import (
 	"time"
 )
 
-const telegramRoot = "https://api.telegram.org/file/bot"
+const telegramRoot = "https://api.telegram.org"
 const botTaskCap = 30
 
 type Bot struct {
@@ -107,7 +109,7 @@ func (b *Bot) downloadPhoto(chatId int64, photoId, downloadPath string) error {
 	if err != nil {
 		return err
 	}
-	downloadUrl := telegramRoot + b.TelegramBot.Token + "/" + resp.FilePath
+	downloadUrl := telegramRoot + "/file/bot" + b.TelegramBot.Token + "/" + resp.FilePath
 	log.Printf("Handle %s url", downloadUrl)
 	raw, err := http.Get(downloadUrl)
 	defer raw.Body.Close()
@@ -124,10 +126,15 @@ func (b *Bot) downloadPhoto(chatId int64, photoId, downloadPath string) error {
 
 func (b *Bot) WatchDog() {
 	log.Println("Start watchdog goroutine...")
+	var me tgbotapi.User
+	watchDogUrl := fmt.Sprintf("%s/bot%s/getMe", telegramRoot, b.TelegramBotToken)
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	go func() {
 		for {
 			b.mutex.Lock()
-			me, err := b.TelegramBot.GetMe()
+			req, _ := http.NewRequestWithContext(ctx, "GET", watchDogUrl, nil)
+			client := &http.Client{}
+			resp, err := client.Do(req)
 			if err != nil {
 				log.Println("Bot connection is broken, try to renew...")
 				renewBot, err := createNewBot(b.TelegramBotToken, b.TelegramBotProxyUrl,
@@ -138,7 +145,13 @@ func (b *Bot) WatchDog() {
 					b.TelegramBot = renewBot
 				}
 			} else {
-				log.Println(fmt.Sprintf("Get Bot Info. Current bot ID - %d", me.ID))
+				err := json.NewDecoder(resp.Body).Decode(&me)
+				if err != nil {
+					log.Println(err.Error())
+				} else {
+					log.Println(fmt.Sprintf("Get Bot Info. Current bot ID - %d", me.ID))
+				}
+				resp.Body.Close()
 			}
 			b.mutex.Unlock()
 			time.Sleep(3 * time.Minute)

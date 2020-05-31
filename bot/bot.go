@@ -128,11 +128,12 @@ func (b *Bot) WatchDog() {
 	log.Println("Start watchdog goroutine...")
 	var me tgbotapi.User
 	watchDogUrl := fmt.Sprintf("%s/bot%s/getMe", telegramRoot, b.TelegramBotToken)
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	go func() {
 		for {
 			b.mutex.Lock()
+			ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 			req, _ := http.NewRequestWithContext(ctx, "GET", watchDogUrl, nil)
+			log.Println(fmt.Sprintf("Try to get %s url", watchDogUrl))
 			client := &http.Client{}
 			resp, err := client.Do(req)
 			if err != nil {
@@ -149,6 +150,7 @@ func (b *Bot) WatchDog() {
 				if err != nil {
 					log.Println(err.Error())
 				} else {
+					log.Println(me)
 					log.Println(fmt.Sprintf("Get Bot Info. Current bot ID - %d", me.ID))
 				}
 				resp.Body.Close()

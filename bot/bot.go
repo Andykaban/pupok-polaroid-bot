@@ -126,14 +126,14 @@ func (b *Bot) downloadPhoto(chatId int64, photoId, downloadPath string) error {
 
 func (b *Bot) WatchDog() {
 	log.Println("Start watchdog goroutine...")
-	var me tgbotapi.User
+	var apiResp tgbotapi.APIResponse
 	watchDogUrl := fmt.Sprintf("%s/bot%s/getMe", telegramRoot, b.TelegramBotToken)
 	go func() {
 		for {
 			b.mutex.Lock()
 			ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 			req, _ := http.NewRequestWithContext(ctx, "GET", watchDogUrl, nil)
-			log.Println(fmt.Sprintf("Try to get %s url", watchDogUrl))
+			log.Printf("Try to get %s url", watchDogUrl)
 			client := &http.Client{}
 			resp, err := client.Do(req)
 			if err != nil {
@@ -146,12 +146,11 @@ func (b *Bot) WatchDog() {
 					b.TelegramBot = renewBot
 				}
 			} else {
-				err := json.NewDecoder(resp.Body).Decode(&me)
+				err := json.NewDecoder(resp.Body).Decode(&apiResp)
 				if err != nil {
 					log.Println(err.Error())
 				} else {
-					log.Println(me)
-					log.Println(fmt.Sprintf("Get Bot Info. Current bot ID - %d", me.ID))
+					log.Println(fmt.Sprintf("Get Bot Info. Current bot status - %t", apiResp.Ok))
 				}
 				resp.Body.Close()
 			}

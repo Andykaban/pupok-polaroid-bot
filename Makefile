@@ -14,9 +14,10 @@ all: image build
 image:
 	docker build -t $(BUILD_IMAGE) .
 
-build:
+build: image
 	docker run --rm -i \
 		-v $(CURRENTDIR):/build/src/github.com/Andykaban/pupok-polaroid-bot \
+		-e GO111MODULE=off \
 		-e GOOS=$(GOOS) \
 		-e GOARCH=$(GOARCH) \
 		-w /build/src/github.com/Andykaban/pupok-polaroid-bot \
